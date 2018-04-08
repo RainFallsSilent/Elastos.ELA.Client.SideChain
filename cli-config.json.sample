@@ -1,5 +1,5 @@
 {
-	"LogToFile":false,
-    "Host": "127.0.0.1:20336"
-	"DestroyAddress":"EMmfgnrDLQmFPBJiWvsyYGV2jzLQY58J4Y",
+    "LogToFile":false,
+    "Host": "127.0.0.1:20336",
+    "DestroyAddress":"EMmfgnrDLQmFPBJiWvsyYGV2jzLQY58J4Y"
 }
