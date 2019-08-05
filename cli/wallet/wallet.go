@@ -237,7 +237,7 @@ func walletAction(context *cli.Context) {
 	if param := context.String("transaction"); param != "" {
 		switch param {
 		case "create":
-			if err := createTransaction(context, wallet); err != nil {
+			if err := createTransaction(name, []byte(pass), context, wallet); err != nil {
 				fmt.Println("error:", err)
 				os.Exit(701)
 			}
@@ -384,6 +384,10 @@ func NewCommand() *cli.Command {
 			cli.StringFlag{
 				Name:  "withdraw",
 				Usage: "create withdraw transaction",
+			},
+			cli.BoolFlag{
+				Name:  "registerdid",
+				Usage: "create register DID transaction",
 			},
 			cli.StringFlag{
 				Name:  "genesis, g",

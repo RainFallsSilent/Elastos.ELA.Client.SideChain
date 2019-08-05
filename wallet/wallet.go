@@ -2,8 +2,11 @@ package wallet
 
 import (
 	"bytes"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	types2 "github.com/elastos/Elastos.ELA.SideChain.ID/types"
 	"github.com/elastos/Elastos.ELA/account"
 	"github.com/elastos/Elastos.ELA/core/contract"
 	"math"
@@ -50,6 +53,7 @@ type Wallet interface {
 	CreateMultiOutputTransaction(fromAddress string, fee *Fixed64, output ...*Transfer) (*types.Transaction, error)
 	CreateLockedMultiOutputTransaction(fromAddress string, fee *Fixed64, lockedUntil uint32, output ...*Transfer) (*types.Transaction, error)
 	CreateCrossChainTransaction(fromAddress, toAddress, crossChainAddress string, amount, fee *Fixed64) (*types.Transaction, error)
+	CreateRegisterDIDTransaction(fromAddress string, fee *Fixed64) (*types.Transaction, error)
 
 	Sign(name string, password []byte, transaction *types.Transaction) (*types.Transaction, error)
 
@@ -325,6 +329,123 @@ func (wallet *WalletImpl) createCrossChainTransaction(fromAddress string, fee *F
 	txn.Payload = txPayload
 
 	return txn, nil
+}
+
+func (wallet *WalletImpl) CreateRegisterDIDTransaction(fromAddress string, fee *Fixed64) (*types.Transaction, error) {
+	// Sync chain block data before create transaction
+	wallet.SyncChainData()
+
+	redeemScript, err := contract.CreateStandardRedeemScript(wallet.GetPublicKey())
+	if err != nil {
+		return nil, err
+	}
+
+	c := &contract.Contract{
+		Code:   redeemScript,
+		Prefix: contract.PrefixCRDID,
+	}
+
+	id, _ := c.ToProgramHash().ToAddress()
+
+	// Check if from address is valid
+	spender, err := Uint168FromAddress(fromAddress)
+	if err != nil {
+		return nil, errors.New(fmt.Sprint("[Wallet], Invalid spender address: ", fromAddress, ", error: ", err))
+	}
+	// Create transaction outputs
+	var totalOutputAmount = Fixed64(0) // The total amount will be spend
+	var txOutputs []*types.Output      // The outputs in transaction
+	totalOutputAmount += *fee          // Add transaction fee
+
+	// Get spender's UTXOs
+	UTXOs, err := wallet.GetAddressUTXOs(spender)
+	if err != nil {
+		return nil, errors.New("[Wallet], Get spender's UTXOs failed")
+	}
+	availableUTXOs := wallet.removeLockedUTXOs(UTXOs) // Remove locked UTXOs
+	availableUTXOs = SortUTXOs(availableUTXOs)        // Sort available UTXOs by value ASC
+
+	// Create transaction inputs
+	var txInputs []*types.Input // The inputs in transaction
+	for _, utxo := range availableUTXOs {
+		input := &types.Input{
+			Previous: types.OutPoint{
+				TxID:  utxo.Op.TxID,
+				Index: utxo.Op.Index,
+			},
+			Sequence: utxo.LockTime,
+		}
+		txInputs = append(txInputs, input)
+		if *utxo.Amount < totalOutputAmount {
+			totalOutputAmount -= *utxo.Amount
+		} else if *utxo.Amount == totalOutputAmount {
+			totalOutputAmount = 0
+			break
+		} else if *utxo.Amount > totalOutputAmount {
+			change := &types.Output{
+				AssetID:     SystemAssetId,
+				Value:       *utxo.Amount - totalOutputAmount,
+				OutputLock:  uint32(0),
+				ProgramHash: *spender,
+			}
+			txOutputs = append(txOutputs, change)
+			totalOutputAmount = 0
+			break
+		}
+	}
+	if totalOutputAmount > 0 {
+		return nil, errors.New("[Wallet], Available token is not enough")
+	}
+
+	account, err := wallet.GetAddressInfo(spender)
+	if err != nil {
+		return nil, errors.New("[Wallet], Get spenders account info failed")
+	}
+
+	tx := wallet.newTransaction(account.RedeemScript, txInputs, txOutputs, types2.RegisterDID)
+	tx.Payload = getPayloadDIDInfo(id, wallet.GetPrivateKey())
+
+	return tx, nil
+}
+
+func getPayloadDIDInfo(id string, privateKey []byte) *types2.PayloadDIDInfo {
+	pBytes := getDIDPayloadBytes(id)
+	info := new(types2.DIDPayloadInfo)
+	json.Unmarshal(pBytes, info)
+	p := &types2.PayloadDIDInfo{
+		Header: types2.DIDHeaderInfo{
+			Specification: "elastos/did/1.0",
+			Operation:     "create",
+		},
+		Payload: hex.EncodeToString(pBytes),
+		Proof: types2.DIDProofInfo{
+			Type:               "ECDSAsecp256r1",
+			VerificationMethod: "did:elastos:" + id,
+		},
+		PayloadInfo: info,
+	}
+	sign, _ := crypto.Sign(privateKey, p.Data(types2.DIDInfoVersion))
+	p.Proof.Signature = hex.EncodeToString(sign)
+	return p
+}
+
+func getDIDPayloadBytes(id string) []byte {
+	return []byte(
+		"{" +
+			"\"id\": \"did:elastos:" + id + "\"," +
+			"\"publicKey\": [{" +
+			"\"id\": \"did:elastos:" + id + "\"," +
+			"\"type\": \"ECDSAsecp256r1\"," +
+			"\"controller\": \"did:elastos:" + id + "\"," +
+			"\"publicKeyBase58\": \"zNxoZaZLdackZQNMas7sCkPRHZsJ3BtdjEvM2y5gNvKJ\"" +
+			"}]," +
+			"\"authentication\": [" +
+			"\"did:elastos:" + id + "\"" +
+			"]," +
+			"\"authorization\": [" +
+			"\"did:elastos:" + id + "\"" +
+			"]}",
+	)
 }
 
 func (wallet *WalletImpl) Sign(name string, password []byte, txn *types.Transaction) (*types.Transaction, error) {

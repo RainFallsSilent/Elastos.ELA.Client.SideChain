@@ -14,13 +14,13 @@ import (
 	"github.com/elastos/Elastos.ELA.Client.SideChain/log"
 	"github.com/elastos/Elastos.ELA.Client.SideChain/rpc"
 	walt "github.com/elastos/Elastos.ELA.Client.SideChain/wallet"
+	. "github.com/elastos/Elastos.ELA.SideChain/types"
 	. "github.com/elastos/Elastos.ELA/common"
 	"github.com/elastos/Elastos.ELA/crypto"
-	. "github.com/elastos/Elastos.ELA.SideChain/types"
 	"github.com/urfave/cli"
 )
 
-func createTransaction(c *cli.Context, wallet walt.Wallet) error {
+func createTransaction(name string, password []byte, c *cli.Context, wallet walt.Wallet) error {
 
 	feeStr := c.String("fee")
 	if feeStr == "" {
@@ -39,6 +39,23 @@ func createTransaction(c *cli.Context, wallet walt.Wallet) error {
 			return err
 		}
 	}
+	var txn *Transaction
+	registerDID := c.String("registerdid")
+	if registerDID != "" {
+		err := wallet.Open(name, password)
+		if err != nil {
+			return err
+		}
+
+		txn, err = wallet.CreateRegisterDIDTransaction(from, fee)
+		if err != nil {
+			return errors.New("create transaction failed: " + err.Error())
+		}
+
+		output(0, 0, txn)
+
+		return nil
+	}
 
 	multiOutput := c.String("file")
 	if multiOutput != "" {
@@ -55,7 +72,6 @@ func createTransaction(c *cli.Context, wallet walt.Wallet) error {
 		return errors.New("invalid transaction amount")
 	}
 
-	var txn *Transaction
 	var to string
 	standard := c.String("to")
 	deposit := c.String("deposit")
@@ -91,7 +107,7 @@ func createTransaction(c *cli.Context, wallet walt.Wallet) error {
 			}
 		}
 	} else {
-		return errors.New("use --to or --deposit or --withdraw to specify receiver address")
+		return errors.New("use --to or --deposit or --withdraw or --registerdid to specify receiver address")
 	}
 
 	output(0, 0, txn)
