@@ -9,8 +9,8 @@ import (
 
 	"github.com/elastos/Elastos.ELA.Client.SideChain/log"
 
-	. "github.com/elastos/Elastos.ELA.Utility/common"
-	. "github.com/elastos/Elastos.ELA.SideChain/core"
+	. "github.com/elastos/Elastos.ELA/common"
+	. "github.com/elastos/Elastos.ELA.SideChain/types"
 	_ "github.com/mattn/go-sqlite3"
 )
 

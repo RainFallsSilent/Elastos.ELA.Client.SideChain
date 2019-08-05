@@ -14,9 +14,9 @@ import (
 	"github.com/elastos/Elastos.ELA.Client.SideChain/log"
 	"github.com/elastos/Elastos.ELA.Client.SideChain/rpc"
 	walt "github.com/elastos/Elastos.ELA.Client.SideChain/wallet"
-	. "github.com/elastos/Elastos.ELA.Utility/common"
-	"github.com/elastos/Elastos.ELA.Utility/crypto"
-	. "github.com/elastos/Elastos.ELA.SideChain/core"
+	. "github.com/elastos/Elastos.ELA/common"
+	"github.com/elastos/Elastos.ELA/crypto"
+	. "github.com/elastos/Elastos.ELA.SideChain/types"
 	"github.com/urfave/cli"
 )
 

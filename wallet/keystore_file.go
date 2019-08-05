@@ -3,11 +3,12 @@ package wallet
 import (
 	"encoding/json"
 	"errors"
+	"github.com/elastos/Elastos.ELA/utils"
 	"io/ioutil"
 	"os"
 	"sync"
 
-	. "github.com/elastos/Elastos.ELA.Utility/common"
+	. "github.com/elastos/Elastos.ELA/common"
 )
 
 const (
@@ -29,7 +30,7 @@ type KeystoreFile struct {
 
 func CreateKeystoreFile(name string) (*KeystoreFile, error) {
 
-	if FileExisted(name) {
+	if utils.FileExisted(name) {
 		return nil, errors.New("key store file already exist")
 	}
 

@@ -5,12 +5,13 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
+	"github.com/elastos/Elastos.ELA/core/contract"
 	"sync"
 
-	. "github.com/elastos/Elastos.ELA.Utility/common"
-	"github.com/elastos/Elastos.ELA.Utility/crypto"
-	. "github.com/elastos/Elastos.ELA.SideChain/core"
 	"crypto/elliptic"
+	"github.com/elastos/Elastos.ELA.SideChain/types"
+	. "github.com/elastos/Elastos.ELA/common"
+	"github.com/elastos/Elastos.ELA/crypto"
 )
 
 const (
@@ -26,7 +27,7 @@ type Keystore interface {
 	GetProgramHash() *Uint168
 	Address() string
 
-	Sign(txn *Transaction) ([]byte, error)
+	Sign(txn *types.Transaction) ([]byte, error)
 }
 
 type KeystoreImpl struct {
@@ -201,16 +202,13 @@ func (store *KeystoreImpl) init(privateKey []byte, publicKey *crypto.PublicKey) 
 
 	var err error
 	// Set redeem script
-	store.redeemScript, err = crypto.CreateStandardRedeemScript(publicKey)
+	store.redeemScript, err = contract.CreateStandardRedeemScript(publicKey)
 	if err != nil {
 		return err
 	}
 
 	// Set program hash
-	store.programHash, err = crypto.ToProgramHash(store.redeemScript)
-	if err != nil {
-		return err
-	}
+	store.programHash = ToProgramHash(byte(contract.PrefixStandard), store.redeemScript)
 
 	// Set address
 	store.address, err = store.programHash.ToAddress()
@@ -237,7 +235,7 @@ func (store *KeystoreImpl) verifyPassword(password []byte) error {
 	if err != nil {
 		return err
 	}
-	if IsEqualBytes(origin, passwordHash[:]) {
+	if bytes.Equal(origin, passwordHash[:]) {
 		return nil
 	}
 	return errors.New("password wrong")
@@ -316,7 +314,7 @@ func (store *KeystoreImpl) Address() string {
 	return store.address
 }
 
-func (store *KeystoreImpl) Sign(txn *Transaction) ([]byte, error) {
+func (store *KeystoreImpl) Sign(txn *types.Transaction) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	txn.SerializeUnsigned(buf)
 	signedData, err := crypto.Sign(store.privateKey, buf.Bytes())

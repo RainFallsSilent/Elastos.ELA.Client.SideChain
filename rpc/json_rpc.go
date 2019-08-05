@@ -10,7 +10,7 @@ import (
 
 	"github.com/elastos/Elastos.ELA.Client.SideChain/config"
 
-	"github.com/elastos/Elastos.ELA.Utility/common"
+	"github.com/elastos/Elastos.ELA/common"
 )
 
 type Response struct {

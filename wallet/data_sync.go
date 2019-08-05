@@ -8,8 +8,8 @@ import (
 	. "github.com/elastos/Elastos.ELA.Client.SideChain/rpc"
 
 	"github.com/cheggaaa/pb"
-	. "github.com/elastos/Elastos.ELA.Utility/common"
-	. "github.com/elastos/Elastos.ELA.SideChain/core"
+	"github.com/elastos/Elastos.ELA.SideChain/types"
+	. "github.com/elastos/Elastos.ELA/common"
 )
 
 type DataSync interface {
@@ -108,13 +108,13 @@ func (sync *DataSyncImpl) processBlock(block *BlockInfo) {
 				txHashBytes, _ := HexStringToBytes(tx.Hash)
 				referTxHash, _ := Uint256FromBytes(BytesReverse(txHashBytes))
 				lockTime := output.OutputLock
-				if tx.TxType == CoinBase {
+				if tx.TxType == types.CoinBase {
 					lockTime = block.Height + 100
 				}
 				amount, _ := StringToFixed64(output.Value)
 				// Save UTXO input to data store
 				addressUTXO := &UTXO{
-					Op:       NewOutPoint(*referTxHash, uint16(index)),
+					Op:       types.NewOutPoint(*referTxHash, uint16(index)),
 					Amount:   amount,
 					LockTime: lockTime,
 				}
@@ -126,7 +126,7 @@ func (sync *DataSyncImpl) processBlock(block *BlockInfo) {
 		for _, input := range tx.Inputs {
 			txHashBytes, _ := HexStringToBytes(input.TxID)
 			referTxID, _ := Uint256FromBytes(BytesReverse(txHashBytes))
-			sync.DeleteUTXO(NewOutPoint(*referTxID, input.VOut))
+			sync.DeleteUTXO(types.NewOutPoint(*referTxID, input.VOut))
 		}
 	}
 }

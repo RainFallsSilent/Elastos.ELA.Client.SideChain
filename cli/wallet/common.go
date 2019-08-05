@@ -1,16 +1,17 @@
 package wallet
 
 import (
-	"os"
-	"fmt"
 	"bufio"
+	"bytes"
 	"errors"
-	"strings"
+	"fmt"
+	"os"
 	"strconv"
+	"strings"
 
 	walt "github.com/elastos/Elastos.ELA.Client.SideChain/wallet"
 
-	. "github.com/elastos/Elastos.ELA.Utility/common"
+	. "github.com/elastos/Elastos.ELA/common"
 	"github.com/howeyc/gopass"
 )
 
@@ -37,7 +38,7 @@ func GetPassword(password []byte, confirmed bool) ([]byte, error) {
 			return nil, err
 		}
 
-		if !IsEqualBytes(password, confirm) {
+		if !bytes.Equal(password, confirm) {
 			return nil, errors.New("input password unmatched")
 		}
 	}

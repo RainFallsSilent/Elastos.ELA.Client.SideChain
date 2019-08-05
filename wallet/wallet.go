@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/elastos/Elastos.ELA/account"
+	"github.com/elastos/Elastos.ELA/core/contract"
 	"math"
 	"math/rand"
 	"strconv"
 
 	"github.com/elastos/Elastos.ELA.Client.SideChain/log"
 
-	. "github.com/elastos/Elastos.ELA.Utility/common"
-	"github.com/elastos/Elastos.ELA.Utility/crypto"
-	. "github.com/elastos/Elastos.ELA.SideChain/core"
+	"github.com/elastos/Elastos.ELA.SideChain/types"
+	. "github.com/elastos/Elastos.ELA/common"
+	"github.com/elastos/Elastos.ELA/crypto"
 )
 
 const (
@@ -41,15 +43,15 @@ type Wallet interface {
 	ChangePassword(oldPassword, newPassword []byte) error
 
 	AddStandardAccount(publicKey *crypto.PublicKey) (*Uint168, error)
-	AddMultiSignAccount(M uint, publicKey ...*crypto.PublicKey) (*Uint168, error)
+	AddMultiSignAccount(M int, publicKey ...*crypto.PublicKey) (*Uint168, error)
 
-	CreateTransaction(fromAddress, toAddress string, amount, fee *Fixed64) (*Transaction, error)
-	CreateLockedTransaction(fromAddress, toAddress string, amount, fee *Fixed64, lockedUntil uint32) (*Transaction, error)
-	CreateMultiOutputTransaction(fromAddress string, fee *Fixed64, output ...*Transfer) (*Transaction, error)
-	CreateLockedMultiOutputTransaction(fromAddress string, fee *Fixed64, lockedUntil uint32, output ...*Transfer) (*Transaction, error)
-	CreateCrossChainTransaction(fromAddress, toAddress, crossChainAddress string, amount, fee *Fixed64) (*Transaction, error)
+	CreateTransaction(fromAddress, toAddress string, amount, fee *Fixed64) (*types.Transaction, error)
+	CreateLockedTransaction(fromAddress, toAddress string, amount, fee *Fixed64, lockedUntil uint32) (*types.Transaction, error)
+	CreateMultiOutputTransaction(fromAddress string, fee *Fixed64, output ...*Transfer) (*types.Transaction, error)
+	CreateLockedMultiOutputTransaction(fromAddress string, fee *Fixed64, lockedUntil uint32, output ...*Transfer) (*types.Transaction, error)
+	CreateCrossChainTransaction(fromAddress, toAddress, crossChainAddress string, amount, fee *Fixed64) (*types.Transaction, error)
 
-	Sign(name string, password []byte, transaction *Transaction) (*Transaction, error)
+	Sign(name string, password []byte, transaction *types.Transaction) (*types.Transaction, error)
 
 	Reset() error
 }
@@ -101,16 +103,12 @@ func (wallet *WalletImpl) Open(name string, password []byte) error {
 }
 
 func (wallet *WalletImpl) AddStandardAccount(publicKey *crypto.PublicKey) (*Uint168, error) {
-	redeemScript, err := crypto.CreateStandardRedeemScript(publicKey)
+	redeemScript, err := contract.CreateStandardRedeemScript(publicKey)
 	if err != nil {
 		return nil, errors.New("[Wallet], CreateStandardRedeemScript failed")
 	}
 
-	programHash, err := crypto.ToProgramHash(redeemScript)
-	if err != nil {
-		return nil, errors.New("[Wallet], CreateStandardAddress failed")
-	}
-
+	programHash := ToProgramHash(byte(contract.PrefixStandard), redeemScript)
 	err = wallet.AddAddress(programHash, redeemScript, TypeStand)
 	if err != nil {
 		return nil, err
@@ -119,16 +117,13 @@ func (wallet *WalletImpl) AddStandardAccount(publicKey *crypto.PublicKey) (*Uint
 	return programHash, nil
 }
 
-func (wallet *WalletImpl) AddMultiSignAccount(M uint, publicKeys ...*crypto.PublicKey) (*Uint168, error) {
-	redeemScript, err := crypto.CreateMultiSignRedeemScript(M, publicKeys)
+func (wallet *WalletImpl) AddMultiSignAccount(M int, publicKeys ...*crypto.PublicKey) (*Uint168, error) {
+	redeemScript, err := contract.CreateMultiSigRedeemScript(M, publicKeys)
 	if err != nil {
 		return nil, errors.New("[Wallet], CreateStandardRedeemScript failed")
 	}
 
-	programHash, err := crypto.ToProgramHash(redeemScript)
-	if err != nil {
-		return nil, errors.New("[Wallet], CreateMultiSignAddress failed")
-	}
+	programHash := ToProgramHash(byte(contract.PrefixMultiSig), redeemScript)
 
 	err = wallet.AddAddress(programHash, redeemScript, TypeMulti)
 	if err != nil {
@@ -138,27 +133,27 @@ func (wallet *WalletImpl) AddMultiSignAccount(M uint, publicKeys ...*crypto.Publ
 	return programHash, nil
 }
 
-func (wallet *WalletImpl) CreateTransaction(fromAddress, toAddress string, amount, fee *Fixed64) (*Transaction, error) {
+func (wallet *WalletImpl) CreateTransaction(fromAddress, toAddress string, amount, fee *Fixed64) (*types.Transaction, error) {
 	return wallet.CreateLockedTransaction(fromAddress, toAddress, amount, fee, uint32(0))
 }
 
-func (wallet *WalletImpl) CreateLockedTransaction(fromAddress, toAddress string, amount, fee *Fixed64, lockedUntil uint32) (*Transaction, error) {
+func (wallet *WalletImpl) CreateLockedTransaction(fromAddress, toAddress string, amount, fee *Fixed64, lockedUntil uint32) (*types.Transaction, error) {
 	return wallet.CreateLockedMultiOutputTransaction(fromAddress, fee, lockedUntil, &Transfer{toAddress, amount})
 }
 
-func (wallet *WalletImpl) CreateMultiOutputTransaction(fromAddress string, fee *Fixed64, outputs ...*Transfer) (*Transaction, error) {
+func (wallet *WalletImpl) CreateMultiOutputTransaction(fromAddress string, fee *Fixed64, outputs ...*Transfer) (*types.Transaction, error) {
 	return wallet.CreateLockedMultiOutputTransaction(fromAddress, fee, uint32(0), outputs...)
 }
 
-func (wallet *WalletImpl) CreateLockedMultiOutputTransaction(fromAddress string, fee *Fixed64, lockedUntil uint32, outputs ...*Transfer) (*Transaction, error) {
+func (wallet *WalletImpl) CreateLockedMultiOutputTransaction(fromAddress string, fee *Fixed64, lockedUntil uint32, outputs ...*Transfer) (*types.Transaction, error) {
 	return wallet.createTransaction(fromAddress, fee, lockedUntil, outputs...)
 }
 
-func (wallet *WalletImpl) CreateCrossChainTransaction(fromAddress, toAddress, crossChainAddress string, amount, fee *Fixed64) (*Transaction, error) {
+func (wallet *WalletImpl) CreateCrossChainTransaction(fromAddress, toAddress, crossChainAddress string, amount, fee *Fixed64) (*types.Transaction, error) {
 	return wallet.createCrossChainTransaction(fromAddress, fee, uint32(0), &CrossChainOutput{toAddress, amount, crossChainAddress})
 }
 
-func (wallet *WalletImpl) createTransaction(fromAddress string, fee *Fixed64, lockedUntil uint32, outputs ...*Transfer) (*Transaction, error) {
+func (wallet *WalletImpl) createTransaction(fromAddress string, fee *Fixed64, lockedUntil uint32, outputs ...*Transfer) (*types.Transaction, error) {
 	// Check if output is valid
 	if len(outputs) == 0 {
 		return nil, errors.New("[Wallet], Invalid transaction target")
@@ -173,7 +168,7 @@ func (wallet *WalletImpl) createTransaction(fromAddress string, fee *Fixed64, lo
 	}
 	// Create transaction outputs
 	var totalOutputAmount = Fixed64(0) // The total amount will be spend
-	var txOutputs []*Output            // The outputs in transaction
+	var txOutputs []*types.Output      // The outputs in transaction
 	totalOutputAmount += *fee          // Add transaction fee
 
 	for _, output := range outputs {
@@ -181,7 +176,7 @@ func (wallet *WalletImpl) createTransaction(fromAddress string, fee *Fixed64, lo
 		if err != nil {
 			return nil, errors.New(fmt.Sprint("[Wallet], Invalid receiver address: ", output.Address, ", error: ", err))
 		}
-		txOutput := &Output{
+		txOutput := &types.Output{
 			AssetID:     SystemAssetId,
 			ProgramHash: *receiver,
 			Value:       *output.Amount,
@@ -199,10 +194,10 @@ func (wallet *WalletImpl) createTransaction(fromAddress string, fee *Fixed64, lo
 	availableUTXOs = SortUTXOs(availableUTXOs)        // Sort available UTXOs by value ASC
 
 	// Create transaction inputs
-	var txInputs []*Input // The inputs in transaction
+	var txInputs []*types.Input // The inputs in transaction
 	for _, utxo := range availableUTXOs {
-		input := &Input{
-			Previous: OutPoint{
+		input := &types.Input{
+			Previous: types.OutPoint{
 				TxID:  utxo.Op.TxID,
 				Index: utxo.Op.Index,
 			},
@@ -215,7 +210,7 @@ func (wallet *WalletImpl) createTransaction(fromAddress string, fee *Fixed64, lo
 			totalOutputAmount = 0
 			break
 		} else if *utxo.Amount > totalOutputAmount {
-			change := &Output{
+			change := &types.Output{
 				AssetID:     SystemAssetId,
 				Value:       *utxo.Amount - totalOutputAmount,
 				OutputLock:  uint32(0),
@@ -235,10 +230,10 @@ func (wallet *WalletImpl) createTransaction(fromAddress string, fee *Fixed64, lo
 		return nil, errors.New("[Wallet], Get spenders account info failed")
 	}
 
-	return wallet.newTransaction(account.RedeemScript, txInputs, txOutputs, TransferAsset), nil
+	return wallet.newTransaction(account.RedeemScript, txInputs, txOutputs, types.TransferAsset), nil
 }
 
-func (wallet *WalletImpl) createCrossChainTransaction(fromAddress string, fee *Fixed64, lockedUntil uint32, outputs ...*CrossChainOutput) (*Transaction, error) {
+func (wallet *WalletImpl) createCrossChainTransaction(fromAddress string, fee *Fixed64, lockedUntil uint32, outputs ...*CrossChainOutput) (*types.Transaction, error) {
 	// Check if output is valid
 	if len(outputs) == 0 {
 		return nil, errors.New("[Wallet], Invalid transaction target")
@@ -253,11 +248,11 @@ func (wallet *WalletImpl) createCrossChainTransaction(fromAddress string, fee *F
 	}
 	// Create transaction outputs
 	var totalOutputAmount = Fixed64(0) // The total amount will be spend
-	var txOutputs []*Output            // The outputs in transaction
+	var txOutputs []*types.Output      // The outputs in transaction
 	totalOutputAmount += *fee          // Add transaction fee
 	perAccountFee := *fee / Fixed64(len(outputs))
 
-	txPayload := &PayloadTransferCrossChainAsset{}
+	txPayload := &types.PayloadTransferCrossChainAsset{}
 	for index, output := range outputs {
 		var receiver *Uint168
 		if output.Address == DESTROY_ADDRESS {
@@ -268,7 +263,7 @@ func (wallet *WalletImpl) createCrossChainTransaction(fromAddress string, fee *F
 				return nil, errors.New(fmt.Sprint("[Wallet], Invalid receiver address: ", output.Address, ", error: ", err))
 			}
 		}
-		txOutput := &Output{
+		txOutput := &types.Output{
 			AssetID:     SystemAssetId,
 			ProgramHash: *receiver,
 			Value:       *output.Amount,
@@ -290,10 +285,10 @@ func (wallet *WalletImpl) createCrossChainTransaction(fromAddress string, fee *F
 	availableUTXOs = SortUTXOs(availableUTXOs)        // Sort available UTXOs by value ASC
 
 	// Create transaction inputs
-	var txInputs []*Input // The inputs in transaction
+	var txInputs []*types.Input // The inputs in transaction
 	for _, utxo := range availableUTXOs {
-		input := &Input{
-			Previous: OutPoint{
+		input := &types.Input{
+			Previous: types.OutPoint{
 				TxID:  utxo.Op.TxID,
 				Index: utxo.Op.Index,
 			},
@@ -306,7 +301,7 @@ func (wallet *WalletImpl) createCrossChainTransaction(fromAddress string, fee *F
 			totalOutputAmount = 0
 			break
 		} else if *utxo.Amount > totalOutputAmount {
-			change := &Output{
+			change := &types.Output{
 				AssetID:     SystemAssetId,
 				Value:       *utxo.Amount - totalOutputAmount,
 				OutputLock:  uint32(0),
@@ -326,13 +321,13 @@ func (wallet *WalletImpl) createCrossChainTransaction(fromAddress string, fee *F
 		return nil, errors.New("[Wallet], Get spenders account info failed")
 	}
 
-	txn := wallet.newTransaction(account.RedeemScript, txInputs, txOutputs, TransferCrossChainAsset)
+	txn := wallet.newTransaction(account.RedeemScript, txInputs, txOutputs, types.TransferCrossChainAsset)
 	txn.Payload = txPayload
 
 	return txn, nil
 }
 
-func (wallet *WalletImpl) Sign(name string, password []byte, txn *Transaction) (*Transaction, error) {
+func (wallet *WalletImpl) Sign(name string, password []byte, txn *types.Transaction) (*types.Transaction, error) {
 	// Verify password
 	err := wallet.Open(name, password)
 	if err != nil {
@@ -364,10 +359,15 @@ func (wallet *WalletImpl) Sign(name string, password []byte, txn *Transaction) (
 	return txn, nil
 }
 
-func (wallet *WalletImpl) signStandardTransaction(txn *Transaction) (*Transaction, error) {
+func (wallet *WalletImpl) signStandardTransaction(txn *types.Transaction) (*types.Transaction, error) {
 	code := txn.Programs[0].Code
 	// Get signer
-	programHash, err := crypto.GetSigner(code)
+	c := &contract.Contract{
+		Code:   code,
+		Prefix: contract.PrefixStandard,
+	}
+
+	programHash := c.ToProgramHash()
 	// Check if current user is a valid signer
 	if *programHash != *wallet.Keystore.GetProgramHash() {
 		return nil, errors.New("[Wallet], Invalid signer")
@@ -387,18 +387,18 @@ func (wallet *WalletImpl) signStandardTransaction(txn *Transaction) (*Transactio
 	return txn, nil
 }
 
-func (wallet *WalletImpl) signMultiSignTransaction(txn *Transaction) (*Transaction, error) {
+func (wallet *WalletImpl) signMultiSignTransaction(txn *types.Transaction) (*types.Transaction, error) {
 	code := txn.Programs[0].Code
 	param := txn.Programs[0].Parameter
 	// Check if current user is a valid signer
 	var signerIndex = -1
-	programHashes, err := crypto.GetSigners(code)
+	programHashes, err := account.GetSigners(code)
 	if err != nil {
 		return nil, err
 	}
 	userProgramHash := wallet.Keystore.GetProgramHash()
 	for i, programHash := range programHashes {
-		if *userProgramHash == *programHash {
+		if userProgramHash.ToCodeHash().IsEqual(*programHash) {
 			signerIndex = i
 			break
 		}
@@ -427,11 +427,11 @@ func (wallet *WalletImpl) Reset() error {
 }
 
 func getSystemAssetId() Uint256 {
-	systemToken := &Transaction{
-		TxType:         RegisterAsset,
+	systemToken := &types.Transaction{
+		TxType:         types.RegisterAsset,
 		PayloadVersion: 0,
-		Payload: &PayloadRegisterAsset{
-			Asset: Asset{
+		Payload: &types.PayloadRegisterAsset{
+			Asset: types.Asset{
 				Name:      "ELA",
 				Precision: 0x08,
 				AssetType: 0x00,
@@ -439,10 +439,10 @@ func getSystemAssetId() Uint256 {
 			Amount:     0 * 100000000,
 			Controller: Uint168{},
 		},
-		Attributes: []*Attribute{},
-		Inputs:     []*Input{},
-		Outputs:    []*Output{},
-		Programs:   []*Program{},
+		Attributes: []*types.Attribute{},
+		Inputs:     []*types.Input{},
+		Outputs:    []*types.Output{},
+		Programs:   []*types.Program{},
 	}
 	return systemToken.Hash()
 }
@@ -462,23 +462,23 @@ func (wallet *WalletImpl) removeLockedUTXOs(utxos []*UTXO) []*UTXO {
 	return availableUTXOs
 }
 
-func (wallet *WalletImpl) newTransaction(redeemScript []byte, inputs []*Input, outputs []*Output, txType TransactionType) *Transaction {
+func (wallet *WalletImpl) newTransaction(redeemScript []byte, inputs []*types.Input, outputs []*types.Output, txType types.TxType) *types.Transaction {
 	// Create payload
-	txPayload := &PayloadTransferAsset{}
+	txPayload := &types.PayloadTransferAsset{}
 	// Create attributes
-	txAttr := NewAttribute(Nonce, []byte(strconv.FormatInt(rand.Int63(), 10)))
-	attributes := make([]*Attribute, 0)
+	txAttr := types.NewAttribute(types.Nonce, []byte(strconv.FormatInt(rand.Int63(), 10)))
+	attributes := make([]*types.Attribute, 0)
 	attributes = append(attributes, &txAttr)
 	// Create program
-	var program = &Program{redeemScript, nil}
+	var program = &types.Program{redeemScript, nil}
 	// Create transaction
-	return &Transaction{
+	return &types.Transaction{
 		TxType:     txType,
 		Payload:    txPayload,
 		Attributes: attributes,
 		Inputs:     inputs,
 		Outputs:    outputs,
-		Programs:   []*Program{program},
+		Programs:   []*types.Program{program},
 		LockTime:   0,
 	}
 }
